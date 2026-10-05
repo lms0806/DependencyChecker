@@ -1,7 +1,7 @@
 {
   "name": "dependency-checker",
   "displayName": "Dependency Checker",
-  "description": "프로젝트 의존성을 검사하는 VS Code 확장",
+  "description": "Cargo.toml 의존성의 최신 crates.io 버전을 보여 줍니다.",
   "version": "0.0.1",
   "publisher": "lms0806",
   "license": "MIT",
@@ -11,14 +11,66 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:toml",
+    "onCommand:dependencyChecker.refresh",
+    "workspaceContains:Cargo.toml",
+    "workspaceContains:**/Cargo.toml"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "dependencyChecker.check",
-        "title": "의존성 검사",
+        "command": "dependencyChecker.refresh",
+        "title": "최신 버전 새로고침",
         "category": "Dependency Checker"
+      }
+    ],
+    "configuration": {
+      "title": "Dependency Checker",
+      "properties": {
+        "dependencyChecker.listPreReleases": {
+          "type": "boolean",
+          "default": false,
+          "description": "프리릴리스를 최신 버전 후보에 포함합니다."
+        },
+        "dependencyChecker.indexUrl": {
+          "type": "string",
+          "default": "https://index.crates.io",
+          "description": "crates.io 스파스 인덱스 주소입니다."
+        }
+      }
+    },
+    "colors": [
+      {
+        "id": "dependencyChecker.upToDate",
+        "description": "요구 범위에 최신 버전이 포함될 때",
+        "defaults": {
+          "dark": "#3fb950",
+          "light": "#1a7f37",
+          "highContrast": "#3fb950",
+          "highContrastLight": "#1a7f37"
+        }
+      },
+      {
+        "id": "dependencyChecker.updateAvailable",
+        "description": "최신 버전이 요구 범위 밖에 있을 때",
+        "defaults": {
+          "dark": "#d29922",
+          "light": "#9a6700",
+          "highContrast": "#d29922",
+          "highContrastLight": "#9a6700"
+        }
+      },
+      {
+        "id": "dependencyChecker.muted",
+        "description": "버전을 확인하는 중이거나 조회에 실패했을 때",
+        "defaults": {
+          "dark": "#8b949e",
+          "light": "#656d76",
+          "highContrast": "#8b949e",
+          "highContrastLight": "#656d76"
+        }
       }
     ]
   },
@@ -28,12 +80,17 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "test:unit": "tsc -p ./ && node --test out/cargo/parseCargoToml.test.js out/cargo/workspace.test.js out/semver/cargoRequirement.test.js out/crates/sparseIndex.test.js"
+  },
+  "dependencies": {
+    "semver": "^7.7.2"
   },
   "devDependencies": {
-    "@types/vscode": "^1.95.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.13.0",
+    "@types/semver": "^7.8.0",
+    "@types/vscode": "^1.95.0",
     "@typescript-eslint/eslint-plugin": "^8.24.0",
     "@typescript-eslint/parser": "^8.24.0",
     "@vscode/test-cli": "^0.0.11",

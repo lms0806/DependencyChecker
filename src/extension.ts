@@ -1,18 +1,16 @@
 import * as vscode from 'vscode';
+import { CargoTomlChecker } from './cargo/cargoChecker.js';
 
 /**
- * 확장이 처음 활성화될 때 호출됩니다.
- * 명령 팔레트의 "Dependency Checker: 의존성 검사" 실행 시 활성화됩니다.
+ * 확장이 활성화될 때 호출됩니다.
+ * 지금은 Cargo.toml만 검사하고, 다른 매니페스트는 같은 방식으로 추가합니다.
  */
 export function activate(context: vscode.ExtensionContext): void {
-  const disposable = vscode.commands.registerCommand('dependencyChecker.check', () => {
-    vscode.window.showInformationMessage('Dependency Checker가 준비되었습니다.');
-  });
-
-  context.subscriptions.push(disposable);
+  const cargoChecker = new CargoTomlChecker();
+  cargoChecker.register(context);
 }
 
 /** 확장이 비활성화될 때 호출됩니다. */
 export function deactivate(): void {
-  // 정리할 리소스가 생기면 여기에 추가합니다.
+  // 구독은 ExtensionContext가 해제합니다.
 }
