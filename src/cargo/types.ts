@@ -34,6 +34,12 @@ export interface CargoDependency {
   kind: DependencyKind;
   section: DependencySection;
   skipped: boolean;
+  /** features 배열에 직접 적은 이름 */
+  features: string[];
+  /** default-features 값. 생략하면 true입니다. */
+  defaultFeatures: boolean;
+  /** 이 선언에 default-features 키를 직접 적었는지 */
+  defaultFeaturesSpecified: boolean;
   /** 요구 버전을 워크스페이스 정의에서 가져온 경우 */
   inherited?: boolean;
   /** workspace = true 이지만 정의를 찾지 못한 경우 */

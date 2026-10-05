@@ -22,5 +22,31 @@ test('yank 된 버전과 깨진 줄은 제외한다', () => {
     'not-json',
     '',
   ].join('\n');
-  assert.deepEqual(parseCrateIndex(body), ['1.1.0', '1.2.0-rc.1']);
+  assert.deepEqual(parseCrateIndex(body).map(version => version.version), ['1.1.0', '1.2.0-rc.1']);
+});
+
+test('features2와 optional 의존성에서 공개 feature 이름을 읽는다', () => {
+  const body = JSON.stringify({
+    name: 'demo',
+    vers: '2.0.0',
+    yanked: false,
+    features: { old: ['x'] },
+    features2: {
+      default: ['std'],
+      std: [],
+      derive: ['dep:serde_derive'],
+      'dep:hidden': [],
+    },
+    deps: [
+      { name: 'serde_derive', optional: true, kind: 'normal' },
+      { name: 'dev_only', optional: true, kind: 'dev' },
+    ],
+  });
+  const version = parseCrateIndex(body)[0];
+  assert.deepEqual(version?.features, {
+    default: ['std'],
+    std: [],
+    derive: ['dep:serde_derive'],
+    serde_derive: [],
+  });
 });

@@ -4,8 +4,14 @@ const USER_AGENT = 'dependency-checker/0.0.1 (VS Code extension)';
 const SUCCESS_TTL_MS = 10 * 60 * 1000;
 const FAILURE_TTL_MS = 30 * 1000;
 
+/** 스파스 인덱스에 있는 버전 하나와 그 버전의 feature 정의입니다. */
+export interface CrateVersion {
+  version: string;
+  features: Readonly<Record<string, readonly string[]>>;
+}
+
 export type CrateLookup =
-  | { type: 'ok'; versions: string[] }
+  | { type: 'ok'; versions: CrateVersion[] }
   | { type: 'notFound' }
   | { type: 'error'; message: string };
 
@@ -75,17 +81,17 @@ export function crateIndexUrl(indexUrl: string, crateName: string): string {
   return `${base}/${sparseIndexPath(crateName)}`;
 }
 
-/** 인덱스 본문에서 yank 되지 않은 버전을 읽습니다. */
-export function parseCrateIndex(body: string): string[] {
-  const versions: string[] = [];
+/** 인덱스 본문에서 yank 되지 않은 버전과 feature 정의를 읽습니다. */
+export function parseCrateIndex(body: string): CrateVersion[] {
+  const versions: CrateVersion[] = [];
   for (const line of body.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) {
       continue;
     }
-    let parsed: { vers?: unknown; yanked?: unknown };
+    let parsed: IndexEntry;
     try {
-      parsed = JSON.parse(trimmed) as { vers?: unknown; yanked?: unknown };
+      parsed = JSON.parse(trimmed) as IndexEntry;
     } catch {
       continue;
     }
@@ -95,9 +101,54 @@ export function parseCrateIndex(body: string): string[] {
     if (!semver.valid(parsed.vers)) {
       continue;
     }
-    versions.push(parsed.vers);
+    versions.push({ version: parsed.vers, features: readFeatureMap(parsed) });
   }
   return versions;
+}
+
+interface IndexEntry {
+  vers?: unknown;
+  yanked?: unknown;
+  features?: unknown;
+  features2?: unknown;
+  deps?: unknown;
+}
+
+function readFeatureMap(entry: IndexEntry): Record<string, readonly string[]> {
+  const source = featureRecord(entry.features2) ?? featureRecord(entry.features) ?? {};
+  const features: Record<string, string[]> = {};
+  for (const [name, values] of Object.entries(source)) {
+    if (name.startsWith('dep:')) {
+      continue;
+    }
+    features[name] = values.filter(value => typeof value === 'string');
+  }
+  if (Array.isArray(entry.deps)) {
+    for (const dep of entry.deps) {
+      if (!dep || typeof dep !== 'object') {
+        continue;
+      }
+      const optionalDep = dep as { name?: unknown; optional?: unknown; kind?: unknown };
+      if (optionalDep.optional !== true || optionalDep.kind === 'dev' || typeof optionalDep.name !== 'string') {
+        continue;
+      }
+      if (!optionalDep.name.startsWith('dep:') && !(optionalDep.name in features)) {
+        features[optionalDep.name] = [];
+      }
+    }
+  }
+  return features;
+}
+
+function featureRecord(value: unknown): Record<string, unknown[]> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const record: Record<string, unknown[]> = {};
+  for (const [name, values] of Object.entries(value)) {
+    record[name] = Array.isArray(values) ? values : [];
+  }
+  return record;
 }
 
 export function getCachedCrate(name: string, indexUrl: string): CrateLookup | undefined {

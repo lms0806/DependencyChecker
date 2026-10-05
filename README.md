@@ -10,6 +10,10 @@
 
 - `✅ 1.0.229`: 지금 적은 요구 범위가 최신 버전을 포함합니다.
 - `❌ 2.0.0`: 최신 버전이 요구 범위 밖에 있습니다. 전구 메뉴에서 그 버전으로 바꿀 수 있습니다.
+- `features +3`: 그 버전에 있지만 아직 켜지 않은 feature가 3개 있습니다. 의존성 위에 마우스를 올리면 이름이 나옵니다.
+- `새 features +1`: 최신 버전에만 있는 feature가 있습니다.
+
+`default-features = false`이면 `default`로 켜지던 feature도 꺼진 것으로 봅니다. `features = ["derive"]`처럼 직접 켠 것과, `default`가 다시 켜는 feature는 이미 켠 것으로 칩니다.
 
 경로 의존성과 Git 의존성은 건너뜁니다. `workspace = true`는 상위 `Cargo.toml`의 `[workspace.dependencies]`에 적힌 요구 버전으로 비교합니다.
 

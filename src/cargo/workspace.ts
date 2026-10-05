@@ -59,6 +59,9 @@ export function resolveInheritedRequirements(
         crateName: defined.crateName,
         requirement: defined.requirement,
         requirementSpan: defined.requirementSpan,
+        features: mergeFeatureNames(defined.features, dependency.features),
+        defaultFeatures: dependency.defaultFeaturesSpecified ? dependency.defaultFeatures : defined.defaultFeatures,
+        defaultFeaturesSpecified: dependency.defaultFeaturesSpecified || defined.defaultFeaturesSpecified,
         inherited: true,
         unresolvedWorkspace: false,
       };
@@ -71,4 +74,14 @@ export function resolveInheritedRequirements(
     }
     return { ...dependency, unresolvedWorkspace: true };
   });
+}
+
+function mergeFeatureNames(base: readonly string[], extra: readonly string[]): string[] {
+  const names = [...base];
+  for (const name of extra) {
+    if (!names.includes(name)) {
+      names.push(name);
+    }
+  }
+  return names;
 }

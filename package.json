@@ -81,7 +81,7 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
-    "test:unit": "tsc -p ./ && node --test out/cargo/parseCargoToml.test.js out/cargo/workspace.test.js out/semver/cargoRequirement.test.js out/crates/sparseIndex.test.js"
+    "test:unit": "tsc -p ./ && node --test out/cargo/parseCargoToml.test.js out/cargo/workspace.test.js out/cargo/features.test.js out/semver/cargoRequirement.test.js out/crates/sparseIndex.test.js"
   },
   "dependencies": {
     "semver": "^7.7.2"

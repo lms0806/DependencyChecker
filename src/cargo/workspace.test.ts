@@ -30,6 +30,20 @@ missing = { workspace = true }
   assert.equal(missing?.unresolvedWorkspace, true);
 });
 
+test('워크스페이스 feature와 멤버 feature를 합친다', () => {
+  const parsed = parseCargoToml(`
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dependencies]
+serde = { workspace = true, features = ["rc"], default-features = false }
+`).dependencies;
+  const resolved = resolveInheritedRequirements(parsed, parsed);
+  const serde = resolved.find(dependency => dependency.section === 'dependencies');
+  assert.deepEqual(serde?.features, ['derive', 'rc']);
+  assert.equal(serde?.defaultFeatures, false);
+});
+
 test('상위 Cargo.toml에서 워크스페이스 매니페스트를 찾는다', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dependency-checker-'));
   const memberDir = path.join(root, 'crates', 'demo');

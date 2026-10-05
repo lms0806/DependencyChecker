@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { lookupCrate, clearCrateCache, getCachedCrate } from '../crates/sparseIndex.js';
 import { judgeRequirement } from '../semver/cargoRequirement.js';
+import { compareCrateFeatures } from './features.js';
 import { parseCargoToml } from './parseCargoToml.js';
 import { CargoDependency, DependencySection, TextSpan } from './types.js';
 import { findWorkspaceManifest, resolveInheritedRequirements } from './workspace.js';
@@ -29,6 +30,12 @@ interface AnalyzedDependency extends ResolvedDependency {
   latest?: string;
   latestInRange?: string;
   message?: string;
+  /** 현재 받을 버전에 있지만 아직 켜지 않은 features */
+  availableFeatures?: string[];
+  /** 이미 켜지는 features */
+  enabledFeatures?: string[];
+  /** 최신 버전에만 있는 features */
+  addedFeatures?: string[];
 }
 
 interface CheckerSettings {
@@ -278,15 +285,34 @@ export class CargoTomlChecker implements vscode.HoverProvider, vscode.CodeAction
       return { ...dependency, status: 'notFound' };
     }
 
-    const judgement = judgeRequirement(dependency.requirement, cached.versions, settings.listPreReleases);
+    const judgement = judgeRequirement(
+      dependency.requirement,
+      cached.versions.map(version => version.version),
+      settings.listPreReleases,
+    );
     if (judgement.status === 'notFound') {
       return { ...dependency, status: 'notFound', message: '사용할 수 있는 버전이 없습니다.' };
     }
+    const byVersion = new Map(cached.versions.map(version => [version.version, version]));
+    const resolvedVersion = judgement.latestInRange ?? judgement.latest;
+    const resolvedEntry = resolvedVersion ? byVersion.get(resolvedVersion) : undefined;
+    const latestEntry = judgement.latest ? byVersion.get(judgement.latest) : undefined;
+    const featureReport = resolvedEntry
+      ? compareCrateFeatures(
+        dependency.features,
+        dependency.defaultFeatures,
+        resolvedEntry.features,
+        judgement.latest !== resolvedVersion ? latestEntry?.features : undefined,
+      )
+      : undefined;
     return {
       ...dependency,
       status: judgement.status,
       latest: judgement.latest,
       latestInRange: judgement.latestInRange,
+      availableFeatures: featureReport?.available,
+      enabledFeatures: featureReport?.enabled,
+      addedFeatures: featureReport?.addedInLatest,
     };
   }
 
@@ -384,15 +410,15 @@ function decorationFor(dependency: AnalyzedDependency): { bucket: 'upToDate' | '
   switch (dependency.status) {
     case 'upToDate':
       return dependency.latest
-        ? { bucket: 'upToDate', text: `✅ ${dependency.latest}`, color: 'dependencyChecker.upToDate' }
+        ? { bucket: 'upToDate', text: withFeatureHint(`✅ ${dependency.latest}`, dependency), color: 'dependencyChecker.upToDate' }
         : undefined;
     case 'updateAvailable':
       return dependency.latest
-        ? { bucket: 'outdated', text: `❌ ${dependency.latest}`, color: 'dependencyChecker.updateAvailable' }
+        ? { bucket: 'outdated', text: withFeatureHint(`❌ ${dependency.latest}`, dependency), color: 'dependencyChecker.updateAvailable' }
         : undefined;
     case 'unparsed':
       return dependency.latest
-        ? { bucket: 'muted', text: `최신 ${dependency.latest}`, color: 'dependencyChecker.muted' }
+        ? { bucket: 'muted', text: withFeatureHint(`최신 ${dependency.latest}`, dependency), color: 'dependencyChecker.muted' }
         : undefined;
     case 'loading':
       return { bucket: 'muted', text: '조회 중', color: 'dependencyChecker.muted' };
@@ -420,6 +446,15 @@ function buildMarkdown(dependency: AnalyzedDependency): string {
   lines.push(statusText(dependency));
   if (dependency.status === 'updateAvailable' && dependency.latestInRange) {
     lines.push(`이 범위에서 받을 수 있는 최신 버전은 \`${dependency.latestInRange}\`입니다.`);
+  }
+  if (dependency.enabledFeatures && dependency.enabledFeatures.length > 0) {
+    lines.push(`켜진 features: ${formatFeatureList(dependency.enabledFeatures)}`);
+  }
+  if (dependency.availableFeatures && dependency.availableFeatures.length > 0) {
+    lines.push(`켜지지 않은 features: ${formatFeatureList(dependency.availableFeatures)}`);
+  }
+  if (dependency.addedFeatures && dependency.addedFeatures.length > 0 && dependency.latest) {
+    lines.push(`최신 ${dependency.latest}에만 있는 features: ${formatFeatureList(dependency.addedFeatures)}`);
   }
   if (dependency.kind === 'registry' || dependency.latest) {
     const crate = encodeURIComponent(dependency.crateName);
@@ -454,6 +489,26 @@ function statusText(dependency: AnalyzedDependency): string {
     default:
       return '';
   }
+}
+
+function withFeatureHint(text: string, dependency: AnalyzedDependency): string {
+  const hints: string[] = [];
+  const available = dependency.availableFeatures?.length ?? 0;
+  const added = dependency.addedFeatures?.length ?? 0;
+  if (available > 0) {
+    hints.push(`features +${available}`);
+  }
+  if (added > 0) {
+    hints.push(`새 features +${added}`);
+  }
+  if (hints.length === 0) {
+    return text;
+  }
+  return `${text} · ${hints.join(', ')}`;
+}
+
+function formatFeatureList(names: readonly string[]): string {
+  return names.map(name => `\`${name.replace(/`/g, '')}\``).join(', ');
 }
 
 function sectionLabel(section: DependencySection): string {

@@ -140,6 +140,36 @@ test('점 표기 키는 한 의존성으로 합친다', () => {
   assert.equal(dependencies[1]?.requirement, '0.24');
 });
 
+test('features와 default-features를 읽는다', () => {
+  const text = [
+    '[dependencies]',
+    'serde = { version = "1", default-features = false, features = ["derive", "rc"] }',
+    'tokio = {',
+    '  version = "1",',
+    '  features = [',
+    '    "macros",',
+    '    "rt-multi-thread",',
+    '  ],',
+    '}',
+    '',
+    '[dependencies.tracing]',
+    'version = "0.1"',
+    'default_features = false',
+    'features = ["std"]',
+  ].join('\n');
+  const dependencies = parseCargoToml(text).dependencies;
+  const serde = dependencies.find(dependency => dependency.name === 'serde');
+  const tokio = dependencies.find(dependency => dependency.name === 'tokio');
+  const tracing = dependencies.find(dependency => dependency.name === 'tracing');
+  assert.deepEqual(serde?.features, ['derive', 'rc']);
+  assert.equal(serde?.defaultFeatures, false);
+  assert.equal(serde?.defaultFeaturesSpecified, true);
+  assert.deepEqual(tokio?.features, ['macros', 'rt-multi-thread']);
+  assert.equal(tokio?.defaultFeatures, true);
+  assert.deepEqual(tracing?.features, ['std']);
+  assert.equal(tracing?.defaultFeatures, false);
+});
+
 test('workspace = true 는 워크스페이스 의존성으로 표시한다', () => {
   const text = '[dependencies]\nserde = { workspace = true, features = ["derive"] }\n';
   const dependency = parseCargoToml(text).dependencies[0];

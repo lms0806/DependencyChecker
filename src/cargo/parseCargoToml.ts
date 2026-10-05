@@ -27,11 +27,14 @@ interface InlineFields {
   git: boolean;
   workspace: boolean;
   packageName?: string;
+  features?: string[];
+  defaultFeatures?: boolean;
 }
 
 type ParsedValue =
   | ({ type: 'string' } & ParsedString)
   | { type: 'bool'; value: boolean; after: TextPoint }
+  | { type: 'strings'; values: string[]; after: TextPoint }
   | { type: 'inline'; fields: InlineFields; after: TextPoint }
   | { type: 'other'; after: TextPoint };
 
@@ -55,6 +58,9 @@ interface MutableDependency {
   path: boolean;
   git: boolean;
   workspace: boolean;
+  features: string[];
+  defaultFeatures: boolean;
+  defaultFeaturesSpecified: boolean;
   markerStartLine: number;
   markerEndLine: number;
 }
@@ -290,9 +296,8 @@ class CargoTomlParser {
       return { type: 'inline', fields: fields.fields, after: fields.after };
     }
     if (ch === '[') {
-      this.advance();
-      this.skipBalanced('[', ']');
-      return { type: 'other', after: this.position() };
+      const parsed = this.parseArray();
+      return { type: 'strings', values: parsed.values, after: parsed.after };
     }
     if (this.consumeLiteral('true')) {
       return { type: 'bool', value: true, after: this.position() };
@@ -342,6 +347,44 @@ class CargoTomlParser {
       }
     }
     return { fields, after: this.position() };
+  }
+
+  private parseArray(): { values: string[]; after: TextPoint } {
+    this.advance();
+    const values: string[] = [];
+    while (!this.eof) {
+      this.skipIgnorable(false);
+      const ch = this.peek();
+      if (ch === ']' || !ch) {
+        if (ch === ']') {
+          this.advance();
+        }
+        break;
+      }
+      const before = this.offset();
+      if (ch === '"' || ch === '\'') {
+        const parsed = this.parseString();
+        if (parsed) {
+          values.push(parsed.text);
+        }
+      } else if (ch === '{' || ch === '[') {
+        const open = ch;
+        const close = ch === '{' ? '}' : ']';
+        this.advance();
+        this.skipBalanced(open, close);
+      } else {
+        this.consumeBareToken();
+      }
+      if (this.offset() <= before) {
+        this.recover();
+        break;
+      }
+      this.skipIgnorable(false);
+      if (this.peek() === ',') {
+        this.advance();
+      }
+    }
+    return { values, after: this.position() };
   }
 
   private parseString(): ParsedString | undefined {
@@ -531,6 +574,9 @@ class CargoTomlParser {
       path: false,
       git: false,
       workspace: false,
+      features: [],
+      defaultFeatures: true,
+      defaultFeaturesSpecified: false,
       markerStartLine: headerLine,
       markerEndLine: headerLine,
     });
@@ -585,6 +631,9 @@ class CargoTomlParser {
       path: false,
       git: false,
       workspace: false,
+      features: [],
+      defaultFeatures: true,
+      defaultFeaturesSpecified: false,
       markerStartLine: assignment.startLine,
       markerEndLine: assignment.endLine,
     };
@@ -615,6 +664,9 @@ class CargoTomlParser {
       kind,
       section: dep.section,
       skipped: this.hasDisableMarker(dep.markerStartLine, dep.markerEndLine),
+      features: dep.features,
+      defaultFeatures: dep.defaultFeatures,
+      defaultFeaturesSpecified: dep.defaultFeaturesSpecified,
     };
   }
 
@@ -650,6 +702,10 @@ function assignField(fields: InlineFields, field: string, value: ParsedValue): v
     fields.workspace = value.value;
   } else if (field === 'package' && value.type === 'string' && value.text) {
     fields.packageName = value.text;
+  } else if (field === 'features' && value.type === 'strings') {
+    fields.features = value.values;
+  } else if ((field === 'default-features' || field === 'default_features') && value.type === 'bool') {
+    fields.defaultFeatures = value.value;
   }
 }
 
@@ -669,6 +725,11 @@ function applyField(dep: MutableDependency, field: string, value: ParsedValue): 
     }
   } else if (field === 'package' && value.type === 'string' && value.text) {
     dep.crateName = value.text;
+  } else if (field === 'features' && value.type === 'strings') {
+    dep.features = value.values;
+  } else if ((field === 'default-features' || field === 'default_features') && value.type === 'bool') {
+    dep.defaultFeatures = value.value;
+    dep.defaultFeaturesSpecified = true;
   }
 }
 
@@ -693,6 +754,13 @@ function applyWholeValue(dep: MutableDependency, value: ParsedValue): void {
   dep.workspace = fields.workspace;
   if (fields.packageName) {
     dep.crateName = fields.packageName;
+  }
+  if (fields.features !== undefined) {
+    dep.features = fields.features;
+  }
+  if (fields.defaultFeatures !== undefined) {
+    dep.defaultFeatures = fields.defaultFeatures;
+    dep.defaultFeaturesSpecified = true;
   }
 }
 
